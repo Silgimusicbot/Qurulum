@@ -16,46 +16,51 @@ import base64
 
 LANG = LANG['MAIN']
 
-def connect (api):
-    heroku_conn = heroku3.from_key(api)
+def connect(api_key):
+    heroku_conn = heroku3.from_key(api_key)
     try:
         heroku_conn.apps()
-    except:
+    except Exception as e:
         hata(LANG['INVALID_KEY'])
         exit(1)
     return heroku_conn
 
-def createApp (connect):
-    appname = "up" + str(time() * 1000)[-4:].replace(".", "") + str(random.randint(0,500))
+def create_app(heroku_conn):
+    appname = "up" + str(time() * 1000)[-4:].replace(".", "") + str(random.randint(0, 500))
     try:
-        connect.create_app(name=appname, stack_id_or_name='container', region_id_or_name="eu")
+        app = heroku_conn.create_app(name=appname, stack_id_or_name='container', region_id_or_name="eu")
     except requests.exceptions.HTTPError:
         hata(LANG['MOST_APP'])
         exit(1)
     return appname
 
-def hgit (connect, repo, appname):
+def hgit(heroku_conn, repo, appname):
     global api
-    app = connect.apps()[appname]
-    giturl = app.git_url.replace(
-            "https://", "https://api:" + api + "@")
+    app = heroku_conn.apps()[appname]
+    giturl = app.git_url.replace("https://", f"https://api:{api}@")
 
     if "heroku" in repo.remotes:
         remote = repo.remote("heroku")
         remote.set_url(giturl)
     else:
         remote = repo.create_remote("heroku", giturl)
+    
     try:
         remote.push(refspec="HEAD:refs/heads/master", force=True)
     except Exception as e:
         hata(LANG['ERROR'] + str(e))
 
     bilgi(LANG['POSTGRE'])
-    app.install_addon(plan_id_or_name='062a1cc7-f79f-404c-9f91-135f70175577', config={})
-    basarili(LANG['SUCCESS_POSTGRE'])
+    try:
+        app.install_addon(plan_id_or_name='heroku-postgresql:hobby-dev', config={})
+        basarili(LANG['SUCCESS_POSTGRE'])
+    except requests.exceptions.HTTPError as e:
+        hata(LANG['ERROR'] + str(e))
+        exit(1)
+
     return app
 
-async def botlog (String, Api, Hash):
+async def botlog(String, Api, Hash):
     Client = TelegramClient(StringSession(String), Api, Hash)
     await Client.start()
 
@@ -67,8 +72,7 @@ async def botlog (String, Api, Hash):
     KanalId = KanalId.chats[0].id
 
     Photo = await Client.upload_file(file='uplogo.jpg')
-    await Client(EditPhotoRequest(channel=KanalId, 
-        photo=Photo))
+    await Client(EditPhotoRequest(channel=KanalId, photo=Photo))
     msg = await Client.send_message(KanalId, LANG['DONT_LEAVE'])
     await msg.pin()
 
@@ -94,34 +98,26 @@ if __name__ == "__main__":
 
     # Heroku #
     bilgi(LANG['CREATING_APP'])
-    appname = createApp(heroku)
+    appname = create_app(heroku)
     basarili(LANG['SUCCESS_APP'])
     onemli(LANG['DOWNLOADING'])
 
-    # Əkən peysərdi naxuy #
+    # Repo URL Decoding
     SyperStringKey = "rotaresU/"
     GiperStringKey = "itreqoG/"
     InvalidKey = "moc.buhtig//:ptth" 
-    str1 = SyperStringKey+GiperStringKey+InvalidKey
-    stringlength=len(str1)
-    slicedString=str1[stringlength::-1]
+    str1 = SyperStringKey + GiperStringKey + InvalidKey
+    slicedString = str1[::-1]
 
     if os.path.isdir("./Userator/"):
         rm_r("./Userator/")
-    repo = Repo.clone_from(slicedString,"./repo/", branch="master")
-    basarili(LANG['DOWNLOADED'])
-    onemli(LANG['DEPLOYING'])
-    app = hgit(heroku, repo, appname)
-    config = app.config()
-
-
+    repo = Repo.clone_from(slicedString, "./repo/", branch="master")
     basarili(LANG['DOWNLOADED'])
     onemli(LANG['DEPLOYING'])
     app = hgit(heroku, repo, appname)
     config = app.config()
 
     onemli(LANG['WRITING_CONFIG'])
-
     config['ANTI_SPAMBOT'] = 'False'
     config['ANTI_SPAMBOT_SHOUT'] = 'False'
     config['API_HASH'] = ahash
@@ -155,8 +151,8 @@ if __name__ == "__main__":
 
     try:
         app.process_formation()["worker"].scale(1)
-    except:
-        hata(LANG['ERROR_DYNO'])
+    except Exception as e:
+        hata(LANG['ERROR_DYNO'] + str(e))
         exit(1)
 
     basarili(LANG['OPENED_DYNO'])
@@ -167,14 +163,12 @@ if __name__ == "__main__":
     if Sonra == True:
         BotLog = False
         Cevap = ""
-        while not Cevap == "3":
+        while Cevap != "3":
             if Cevap == "1":
                 bilgi(LANG['OPENING_BOTLOG'])
-
                 KanalId = loop.run_until_complete(botlog(stri, aid, ahash))
                 config['BOTLOG'] = "True"
                 config['BOTLOG_CHATID'] = KanalId
-
                 basarili(LANG['OPENED_BOTLOG'])
                 BotLog = True
             elif Cevap == "2":
@@ -183,9 +177,7 @@ if __name__ == "__main__":
                     basarili(LANG['SUCCESS_LOG'])
                 else:
                     hata(LANG['NEED_BOTLOG'])
-         
             
             bilgi(f"\[1] {LANG['BOTLOG']}\n[2] {LANG['NO_LOG']}\n\[3] {LANG['CLOSE']}")
-            
             Cevap = Prompt.ask(f"[bold yellow]{LANG['WHAT_YOU_WANT']}[/]", choices=["1", "2", "3"], default="3")
-            basarili(LANG['SEEYOU'])
+        basarili(LANG['SEEYOU'])
